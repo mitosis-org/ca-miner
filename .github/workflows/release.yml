@@ -30,26 +30,32 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             name: ca-miner-linux-x86_64
+            use_cross: false
 
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             name: ca-miner-linux-x86_64-musl
+            use_cross: true
 
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             name: ca-miner-linux-aarch64
+            use_cross: true
 
           - target: x86_64-apple-darwin
             os: macos-latest
             name: ca-miner-macos-x86_64
+            use_cross: false
 
           - target: aarch64-apple-darwin
             os: macos-latest
             name: ca-miner-macos-aarch64
+            use_cross: false
 
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             name: ca-miner-windows-x86_64.exe
+            use_cross: false
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -61,16 +67,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install Cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install native dependencies (Linux native)
+        if: matrix.os == 'ubuntu-latest' && !matrix.use_cross
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-multilib
-          if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
-            sudo apt-get install -y musl-tools
-          elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
+          sudo apt-get install -y pkg-config libssl-dev
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -91,16 +96,24 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build release binary
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
-          cargo build --release --target ${{ matrix.target }}
+          if [[ "${{ matrix.use_cross }}" == "true" ]]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
 
       - name: Strip binary (Linux and macOS)
         if: matrix.os != 'windows-latest'
         run: |
           if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/ca-miner
+            # For cross-compiled aarch64, the strip tool might not be available
+            # Let's check if the binary exists and try to strip it
+            if command -v aarch64-linux-gnu-strip >/dev/null 2>&1; then
+              aarch64-linux-gnu-strip target/${{ matrix.target }}/release/ca-miner
+            else
+              echo "aarch64-linux-gnu-strip not found, skipping strip"
+            fi
           else
             strip target/${{ matrix.target }}/release/ca-miner
           fi

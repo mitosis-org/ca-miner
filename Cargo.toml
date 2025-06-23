@@ -1,0 +1,34 @@
+[package]
+authors     = ["eddy@mitosis.org"]
+description = "High-performance Ethereum contract address miner for CREATE2 and CREATE3 patterns"
+edition     = "2021"
+license     = "MIT"
+name        = "ca-miner"
+readme      = "README.md"
+repository  = "https://github.com/mitosis-org/ca-miner"
+version     = "0.1.0"
+
+[[bin]]
+name = "ca-miner"
+path = "src/main.rs"
+
+[dependencies]
+alloy     = { version = "1", features = ["full"] }
+anyhow    = "1"
+clap      = { version = "4", features = ["derive"] }
+colored   = "3"
+indicatif = "0.17"
+rand      = "0.9"
+rayon     = "1"
+
+[profile.release]
+codegen-units = 1
+debug         = false
+lto           = true
+opt-level     = 3
+panic         = "abort"
+strip         = true
+
+[profile.dev]
+debug     = true
+opt-level = 1

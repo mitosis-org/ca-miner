@@ -1,0 +1,143 @@
+name: Nightly Build
+
+on:
+  schedule:
+    # Run every night at 2 AM UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  nightly-test:
+    name: Nightly Test
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: nightly-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: nightly-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: nightly-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release
+        run: cargo build --release --verbose
+
+  performance-benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: bench-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: bench-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: bench-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Run performance test
+        run: |
+          echo "🚀 Running performance benchmark..."
+          timeout 30s ./target/release/ca-miner create2 \
+            0x0000000000000000000000000000000000000000 \
+            0x1234567890123456789012345678901234567890123456789012345678901234 \
+            dead \
+            --max-iterations 1000000 || true
+
+          echo "✅ Performance test completed"
+
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [nightly-test, performance-benchmark]
+    if: failure()
+    steps:
+      - name: Create Issue on Failure
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const title = `Nightly Build Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## 🚨 Nightly Build Failure
+
+            The nightly build has failed. Please investigate and fix the issues.
+
+            **Workflow Run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            **Date**: ${new Date().toISOString()}
+            **Branch**: ${{ github.ref_name }}
+            **Commit**: ${{ github.sha }}
+
+            ### Jobs Status
+            - Nightly Test: ${{ needs.nightly-test.result }}
+            - Performance Benchmark: ${{ needs.performance-benchmark.result }}
+
+            ---
+
+            *This issue was automatically created by the nightly build workflow.*
+            `;
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'nightly-build-failure',
+              state: 'open'
+            });
+
+            if (issues.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['bug', 'nightly-build-failure', 'automated']
+              });
+            }

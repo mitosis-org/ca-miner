@@ -172,23 +172,6 @@ ca-miner create2 \
   --max-iterations 100000000
 ```
 
-## 📊 Performance
-
-Typical performance on modern hardware:
-
-| Hardware                    | Performance    |
-| --------------------------- | -------------- |
-| Apple M1 Pro (10 cores)     | ~40M salts/sec |
-| Intel i7-10700K (8 cores)   | ~25M salts/sec |
-| AMD Ryzen 7 5800X (8 cores) | ~30M salts/sec |
-
-Performance scales with:
-
-- CPU core count
-- Memory bandwidth
-- Pattern complexity (longer patterns = slower)
-- Case sensitivity (EIP-55 is slower)
-
 ## 🔧 Technical Details
 
 ### CREATE2 Address Generation

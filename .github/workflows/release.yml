@@ -14,65 +14,15 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Add permissions for the workflow
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      release_id: ${{ steps.create_release.outputs.id }}
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name || github.event.inputs.tag }}
-          release_name: CA Miner ${{ github.ref_name || github.event.inputs.tag }}
-          body: |
-            ## CA Miner ${{ github.ref_name || github.event.inputs.tag }}
-
-            High-performance Ethereum contract address miner for CREATE2 and CREATE3 patterns.
-
-            ### 🚀 Quick Start
-
-            Download the appropriate binary for your platform below and run:
-
-            ```bash
-            # CREATE2 mining example
-            ./ca-miner create2 \
-              0x4e59b44847b379578588920cA78FbF26c0B4956C \
-              0x1234567890123456789012345678901234567890123456789012345678901234 \
-              dead \
-              --max-iterations 1000000
-            ```
-
-            ### 📦 Installation
-
-            1. Download the binary for your platform from the assets below
-            2. Extract the archive: `tar -xzf ca-miner-*.tar.gz` (Linux/macOS) or unzip (Windows)
-            3. Make it executable: `chmod +x ca-miner` (Linux/macOS)
-            4. Run `./ca-miner --help` to see all options
-
-            ### 🔗 Links
-
-            - [Documentation](https://github.com/mitosis-org/ca-miner#readme)
-            - [Source Code](https://github.com/mitosis-org/ca-miner)
-            - [Issues](https://github.com/mitosis-org/ca-miner/issues)
-
-            ---
-
-            **Full Changelog**: https://github.com/mitosis-org/ca-miner/compare/v0.0.0...${{ github.ref_name || github.event.inputs.tag }}
-          draft: false
-          prerelease: false
-
   build:
     name: Build Release Binaries
-    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -172,24 +122,73 @@ jobs:
           7z a ../../../${{ matrix.name }}.zip ca-miner.exe
           cd ../../..
 
-      - name: Upload Linux/macOS binary
-        if: matrix.os != 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ matrix.name }}.tar.gz
-          asset_name: ${{ matrix.name }}.tar.gz
-          asset_content_type: application/gzip
+          name: ${{ matrix.name }}
+          path: |
+            ${{ matrix.name }}.tar.gz
+            ${{ matrix.name }}.zip
 
-      - name: Upload Windows binary
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  create-release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Display structure of downloaded files
+        run: ls -la
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ matrix.name }}.zip
-          asset_name: ${{ matrix.name }}.zip
-          asset_content_type: application/zip
+          tag_name: ${{ github.ref_name || github.event.inputs.tag }}
+          name: CA Miner ${{ github.ref_name || github.event.inputs.tag }}
+          body: |
+            ## CA Miner ${{ github.ref_name || github.event.inputs.tag }}
+
+            High-performance Ethereum contract address miner for CREATE2 and CREATE3 patterns.
+
+            ### 🚀 Quick Start
+
+            Download the appropriate binary for your platform below and run:
+
+            ```bash
+            # CREATE2 mining example
+            ./ca-miner create2 \
+              0x4e59b44847b379578588920cA78FbF26c0B4956C \
+              0x1234567890123456789012345678901234567890123456789012345678901234 \
+              dead \
+              --max-iterations 1000000
+            ```
+
+            ### 📦 Installation
+
+            1. Download the binary for your platform from the assets below
+            2. Extract the archive: `tar -xzf ca-miner-*.tar.gz` (Linux/macOS) or unzip (Windows)
+            3. Make it executable: `chmod +x ca-miner` (Linux/macOS)
+            4. Run `./ca-miner --help` to see all options
+
+            ### 🔗 Links
+
+            - [Documentation](https://github.com/mitosis-org/ca-miner#readme)
+            - [Source Code](https://github.com/mitosis-org/ca-miner)
+            - [Issues](https://github.com/mitosis-org/ca-miner/issues)
+
+            ---
+
+            **Full Changelog**: https://github.com/mitosis-org/ca-miner/compare/v0.0.0...${{ github.ref_name || github.event.inputs.tag }}
+          draft: false
+          prerelease: false
+          files: |
+            */ca-miner-linux-x86_64.tar.gz
+            */ca-miner-linux-x86_64-musl.tar.gz
+            */ca-miner-linux-aarch64.tar.gz
+            */ca-miner-macos-x86_64.tar.gz
+            */ca-miner-macos-aarch64.tar.gz
+            */ca-miner-windows-x86_64.exe.zip

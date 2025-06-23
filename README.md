@@ -14,39 +14,21 @@ A blazing-fast Rust-based tool for mining Ethereum contract addresses with speci
 
 ## 🛠️ Installation
 
-### Download Pre-built Binaries
-
-Download the latest release for your platform from the [GitHub Releases](https://github.com/mitosis-org/ca-miner/releases) page:
-
-- **Linux (x86_64)**: `ca-miner-linux-x86_64.tar.gz`
-- **Linux (aarch64)**: `ca-miner-linux-aarch64.tar.gz`
-- **Linux (musl)**: `ca-miner-linux-x86_64-musl.tar.gz`
-- **macOS (Intel)**: `ca-miner-macos-x86_64.tar.gz`
-- **macOS (Apple Silicon)**: `ca-miner-macos-aarch64.tar.gz`
-- **Windows**: `ca-miner-windows-x86_64.exe.zip`
-
-### Installation Steps
-
-1. Download the appropriate binary for your platform
-2. Extract the archive:
-   ```bash
-   tar -xzf ca-miner-linux-x86_64.tar.gz  # Linux/macOS
-   unzip ca-miner-windows-x86_64.exe.zip  # Windows
-   ```
-3. Make it executable (Linux/macOS):
-   ```bash
-   chmod +x ca-miner
-   ```
-4. Run the tool:
-   ```bash
-   ./ca-miner --help
-   ```
-
-### Build from Source
+### Install via Cargo
 
 Requirements:
 
 - Rust 1.70+ installed ([rustup.rs](https://rustup.rs/))
+
+```bash
+cargo install --git ssh://git@github.com/mitosis-org/ca-miner.git
+```
+
+After installation, the `ca-miner` binary will be available in your PATH.
+
+### Build from Source
+
+Alternatively, you can build from source:
 
 ```bash
 git clone https://github.com/mitosis-org/ca-miner.git
@@ -63,7 +45,7 @@ The binary will be available at `target/release/ca-miner`.
 Mine a CREATE2 address with "dead" prefix:
 
 ```bash
-./ca-miner create2 \
+ca-miner create2 \
   0x4e59b44847b379578588920cA78FbF26c0B4956C \
   0x1234567890123456789012345678901234567890123456789012345678901234 \
   dead \
@@ -75,7 +57,7 @@ Mine a CREATE2 address with "dead" prefix:
 Mine a CREATE3 address with "cafe" postfix:
 
 ```bash
-./ca-miner create3 \
+ca-miner create3 \
   0x4e59b44847b379578588920cA78FbF26c0B4956C \
   "https://example.com/init" \
   cafe \
@@ -127,7 +109,7 @@ ca-miner create3 <FACTORY> <URL> <PREFIX> [OPTIONS]
 
 ```bash
 # Mine addresses starting with "dead"
-./ca-miner create2 \
+ca-miner create2 \
   0x4e59b44847b379578588920cA78FbF26c0B4956C \
   0x1234567890123456789012345678901234567890123456789012345678901234 \
   dead
@@ -137,7 +119,7 @@ ca-miner create3 <FACTORY> <URL> <PREFIX> [OPTIONS]
 
 ```bash
 # Mine with proper Ethereum checksum
-./ca-miner create2 \
+ca-miner create2 \
   0x4e59b44847b379578588920cA78FbF26c0B4956C \
   0x1234567890123456789012345678901234567890123456789012345678901234 \
   DeaD \
@@ -148,7 +130,7 @@ ca-miner create3 <FACTORY> <URL> <PREFIX> [OPTIONS]
 
 ```bash
 # Mine addresses ending with "beef"
-./ca-miner create2 \
+ca-miner create2 \
   0x4e59b44847b379578588920cA78FbF26c0B4956C \
   0x1234567890123456789012345678901234567890123456789012345678901234 \
   beef \
@@ -159,7 +141,7 @@ ca-miner create3 <FACTORY> <URL> <PREFIX> [OPTIONS]
 
 ```bash
 # Mine addresses with both prefix "dead" AND postfix "beef"
-./ca-miner create2 \
+ca-miner create2 \
   0x4e59b44847b379578588920cA78FbF26c0B4956C \
   0x1234567890123456789012345678901234567890123456789012345678901234 \
   dead \
@@ -170,7 +152,7 @@ ca-miner create3 <FACTORY> <URL> <PREFIX> [OPTIONS]
 
 ```bash
 # Use random salts for better distribution
-./ca-miner create2 \
+ca-miner create2 \
   0x4e59b44847b379578588920cA78FbF26c0B4956C \
   0x1234567890123456789012345678901234567890123456789012345678901234 \
   cafe \
@@ -182,7 +164,7 @@ ca-miner create3 <FACTORY> <URL> <PREFIX> [OPTIONS]
 
 ```bash
 # Optimize for your hardware
-./ca-miner create2 \
+ca-miner create2 \
   0x4e59b44847b379578588920cA78FbF26c0B4956C \
   0x1234567890123456789012345678901234567890123456789012345678901234 \
   dead \

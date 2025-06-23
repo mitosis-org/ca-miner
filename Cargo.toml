@@ -1,5 +1,5 @@
 [package]
-authors     = ["eddy@mitosis.org"]
+authors     = ["hong@byeongsu.dev"]
 description = "High-performance Ethereum contract address miner for CREATE2 and CREATE3 patterns"
 edition     = "2021"
 license     = "MIT"

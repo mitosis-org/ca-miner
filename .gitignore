@@ -35,3 +35,5 @@ perf.data*
 # Temporary files
 *.tmp
 *.temp
+
+coverage/

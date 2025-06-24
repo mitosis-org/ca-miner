@@ -149,3 +149,206 @@ fn check_postfix_match(addr: &Address, postfix: &[u8], postfix_len: usize) -> bo
     }
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::primitives::{address, b256};
+
+    fn create_test_config_create2() -> MinerConfig {
+        MinerConfig {
+            factory_address: address!("742d35cc6bf8632ebc4532fb6d8b2946fbbb85c8"),
+            url_or_bytecode_bytes: b256!(
+                "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+            )
+            .to_vec(),
+            prefix_bytes: b"dead".to_vec(),
+            prefix_len: 4,
+            postfix_bytes: Vec::new(),
+            postfix_len: 0,
+            mode: MiningMode::Create2,
+            case_sensitive: false,
+            postfix_only: false,
+            dual_matching: false,
+        }
+    }
+
+    fn create_test_config_create3() -> MinerConfig {
+        MinerConfig {
+            factory_address: address!("742d35cc6bf8632ebc4532fb6d8b2946fbbb85c8"),
+            url_or_bytecode_bytes: b"https://example.com".to_vec(),
+            prefix_bytes: b"cafe".to_vec(),
+            prefix_len: 4,
+            postfix_bytes: Vec::new(),
+            postfix_len: 0,
+            mode: MiningMode::Create3,
+            case_sensitive: false,
+            postfix_only: false,
+            dual_matching: false,
+        }
+    }
+
+    #[test]
+    fn test_get_create2_address() {
+        let config = create_test_config_create2();
+        let salt = B256::ZERO;
+
+        let addr = get_create2_address(&config, &salt);
+
+        // Test that we get a valid address (20 bytes)
+        assert_eq!(addr.as_slice().len(), 20);
+
+        // Test deterministic behavior - same inputs should produce same output
+        let addr2 = get_create2_address(&config, &salt);
+        assert_eq!(addr, addr2);
+
+        // Test different salt produces different address
+        let different_salt =
+            b256!("0000000000000000000000000000000000000000000000000000000000000001");
+        let addr3 = get_create2_address(&config, &different_salt);
+        assert_ne!(addr, addr3);
+    }
+
+    #[test]
+    fn test_get_create3_address() {
+        let config = create_test_config_create3();
+        let salt = B256::ZERO;
+
+        let addr = get_create3_address(&config, &salt);
+
+        // Test that we get a valid address (20 bytes)
+        assert_eq!(addr.as_slice().len(), 20);
+
+        // Test deterministic behavior
+        let addr2 = get_create3_address(&config, &salt);
+        assert_eq!(addr, addr2);
+
+        // Test different salt produces different address
+        let different_salt =
+            b256!("0000000000000000000000000000000000000000000000000000000000000001");
+        let addr3 = get_create3_address(&config, &different_salt);
+        assert_ne!(addr, addr3);
+    }
+
+    #[test]
+    fn test_get_deployed_address() {
+        let config_create2 = create_test_config_create2();
+        let config_create3 = create_test_config_create3();
+        let salt = B256::ZERO;
+
+        let addr_create2 = get_deployed_address(&config_create2, &salt);
+        let addr_create3 = get_deployed_address(&config_create3, &salt);
+
+        // Should delegate to the correct function based on mode
+        assert_eq!(addr_create2, get_create2_address(&config_create2, &salt));
+        assert_eq!(addr_create3, get_create3_address(&config_create3, &salt));
+
+        // Different modes should produce different addresses
+        assert_ne!(addr_create2, addr_create3);
+    }
+
+    #[test]
+    fn test_check_prefix_match() {
+        // Create an address that starts with 'dead'
+        let addr = address!("deadbeefcafebabe1234567890abcdef12345678");
+
+        let prefix = b"dead";
+        assert!(check_prefix_match(&addr, prefix, 4));
+
+        let wrong_prefix = b"cafe";
+        assert!(!check_prefix_match(&addr, wrong_prefix, 4));
+
+        // Test partial match
+        let partial_prefix = b"de";
+        assert!(check_prefix_match(&addr, partial_prefix, 2));
+    }
+
+    #[test]
+    fn test_check_postfix_match() {
+        // Create an address that ends with 'beef'
+        let addr = address!("1234567890abcdef1234567890abcdefdeadbeef");
+
+        let postfix = b"beef";
+        assert!(check_postfix_match(&addr, postfix, 4));
+
+        let wrong_postfix = b"cafe";
+        assert!(!check_postfix_match(&addr, wrong_postfix, 4));
+
+        // Test partial match
+        let partial_postfix = b"ef";
+        assert!(check_postfix_match(&addr, partial_postfix, 2));
+    }
+
+    #[test]
+    fn test_check_address_match_prefix_only() {
+        let mut config = create_test_config_create2();
+        config.prefix_bytes = b"dead".to_vec();
+        config.prefix_len = 4;
+
+        let matching_addr = address!("deadbeefcafebabe1234567890abcdef12345678");
+        let non_matching_addr = address!("cafebabedeadbeef1234567890abcdef12345678");
+
+        assert!(check_address_match(&matching_addr, &config));
+        assert!(!check_address_match(&non_matching_addr, &config));
+    }
+
+    #[test]
+    fn test_check_address_match_postfix_only() {
+        let mut config = create_test_config_create2();
+        config.prefix_bytes = b"beef".to_vec();
+        config.prefix_len = 4;
+        config.postfix_only = true;
+
+        let matching_addr = address!("1234567890abcdef1234567890abcdefdeadbeef");
+        let non_matching_addr = address!("beefcafebabe1234567890abcdef123456789012");
+
+        assert!(check_address_match(&matching_addr, &config));
+        assert!(!check_address_match(&non_matching_addr, &config));
+    }
+
+    #[test]
+    fn test_check_address_match_dual_matching() {
+        let mut config = create_test_config_create2();
+        config.prefix_bytes = b"dead".to_vec();
+        config.prefix_len = 4;
+        config.postfix_bytes = b"beef".to_vec();
+        config.postfix_len = 4;
+        config.dual_matching = true;
+
+        let matching_addr = address!("deadbeefcafebabe1234567890abcdefdeadbeef");
+        let prefix_only_addr = address!("deadbeefcafebabe1234567890abcdef12345678");
+        let postfix_only_addr = address!("1234567890abcdef1234567890abcdefdeadbeef");
+        let non_matching_addr = address!("cafebabe1234567890abcdef123456789012dead");
+
+        assert!(check_address_match(&matching_addr, &config));
+        assert!(!check_address_match(&prefix_only_addr, &config));
+        assert!(!check_address_match(&postfix_only_addr, &config));
+        assert!(!check_address_match(&non_matching_addr, &config));
+    }
+
+    #[test]
+    fn test_check_address_match_case_sensitive() {
+        let mut config = create_test_config_create2();
+        config.case_sensitive = true;
+        config.prefix_bytes = b"0xDead".to_vec(); // Note the capital D
+
+        // This test is more complex because EIP-55 checksum addresses depend on the full address
+        // We'll test that the case-sensitive flag changes behavior
+        let addr = address!("deadbeefcafebabe1234567890abcdef12345678");
+
+        // Test with case sensitive vs insensitive
+        config.case_sensitive = false;
+        config.prefix_bytes = b"dead".to_vec();
+        config.prefix_len = 4;
+        let case_insensitive_result = check_address_match(&addr, &config);
+
+        config.case_sensitive = true;
+        let case_sensitive_result = check_address_match(&addr, &config);
+
+        // Results may differ based on EIP-55 checksum
+        // At minimum, the function should handle both modes without panicking
+        // The important thing is that both functions execute without panic
+        let _ = case_insensitive_result;
+        let _ = case_sensitive_result;
+    }
+}

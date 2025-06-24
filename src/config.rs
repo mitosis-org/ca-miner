@@ -207,3 +207,76 @@ impl MinerConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::primitives::{address, b256};
+
+    #[test]
+    fn test_miner_config_compute_final_salt_create2() {
+        let config = MinerConfig {
+            factory_address: address!("742d35cc6bf8632ebc4532fb6d8b2946fbbb85c8"),
+            url_or_bytecode_bytes: b256!(
+                "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+            )
+            .to_vec(),
+            prefix_bytes: b"dead".to_vec(),
+            prefix_len: 4,
+            postfix_bytes: Vec::new(),
+            postfix_len: 0,
+            mode: MiningMode::Create2,
+            case_sensitive: false,
+            postfix_only: false,
+            dual_matching: false,
+        };
+
+        let salt = b256!("0000000000000000000000000000000000000000000000000000000000000123");
+        let final_salt = config.compute_final_salt(&salt);
+
+        // For CREATE2, salt should be returned as-is
+        assert_eq!(final_salt, salt);
+    }
+
+    #[test]
+    fn test_miner_config_compute_final_salt_create3() {
+        let config = MinerConfig {
+            factory_address: address!("742d35cc6bf8632ebc4532fb6d8b2946fbbb85c8"),
+            url_or_bytecode_bytes: b"https://example.com".to_vec(),
+            prefix_bytes: b"cafe".to_vec(),
+            prefix_len: 4,
+            postfix_bytes: Vec::new(),
+            postfix_len: 0,
+            mode: MiningMode::Create3,
+            case_sensitive: false,
+            postfix_only: false,
+            dual_matching: false,
+        };
+
+        let salt = b256!("0000000000000000000000000000000000000000000000000000000000000123");
+        let final_salt = config.compute_final_salt(&salt);
+
+        // For CREATE3, salt should be combined with URL and hashed
+        assert_ne!(final_salt, salt);
+
+        // Test deterministic behavior
+        let final_salt2 = config.compute_final_salt(&salt);
+        assert_eq!(final_salt, final_salt2);
+
+        // Test different salt produces different result
+        let different_salt =
+            b256!("0000000000000000000000000000000000000000000000000000000000000456");
+        let different_final_salt = config.compute_final_salt(&different_salt);
+        assert_ne!(final_salt, different_final_salt);
+    }
+
+    #[test]
+    fn test_mining_mode_debug() {
+        // Test that MiningMode implements Debug trait
+        let mode1 = MiningMode::Create2;
+        let mode2 = MiningMode::Create3;
+
+        assert!(format!("{:?}", mode1).contains("Create2"));
+        assert!(format!("{:?}", mode2).contains("Create3"));
+    }
+}

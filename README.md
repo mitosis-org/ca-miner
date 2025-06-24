@@ -225,6 +225,42 @@ Run with optimizations:
 cargo test --release
 ```
 
+### Code Coverage
+
+Generate test coverage reports:
+
+```bash
+# Install cargo-tarpaulin (one-time setup)
+cargo install cargo-tarpaulin
+
+# Generate coverage report
+cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml --out Html --out stdout
+```
+
+Or use the provided script:
+
+```bash
+./scripts/test-coverage.sh
+```
+
+This generates:
+
+- `cobertura.xml` - XML format for CI/CD integration
+- `tarpaulin-report.html` - Detailed HTML report
+
+Current test coverage: **27.45%** (101/368 lines covered)
+
+### Test Structure
+
+The test suite covers:
+
+- ✅ **Utility functions**: Address parsing, number formatting, salt conversion
+- ✅ **Address generation**: CREATE2 and CREATE3 address computation
+- ✅ **Pattern matching**: Prefix, postfix, and dual pattern matching
+- ✅ **Configuration**: Salt computation for different modes
+- ✅ **Mining logic**: Batch processing and early termination
+- 🔄 **Integration tests**: End-to-end mining scenarios (planned)
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.

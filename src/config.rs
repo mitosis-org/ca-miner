@@ -198,11 +198,18 @@ impl MinerConfig {
                 *salt
             }
             MiningMode::Create3 => {
-                // For CREATE3, salt is combined with URL
-                let mut packed = Vec::with_capacity(self.url_or_bytecode_bytes.len() + 32);
-                packed.extend_from_slice(&self.url_or_bytecode_bytes);
-                packed.extend_from_slice(salt.as_slice());
-                keccak256(&packed)
+                // For CREATE3, salt logic matches Solidity:
+                // bytes memory preimage = salt == bytes32(0) ? abi.encodePacked(url) : abi.encodePacked(url, salt);
+                if *salt == B256::ZERO {
+                    // When salt is zero, use only URL
+                    keccak256(&self.url_or_bytecode_bytes)
+                } else {
+                    // When salt is non-zero, combine URL with salt
+                    let mut packed = Vec::with_capacity(self.url_or_bytecode_bytes.len() + 32);
+                    packed.extend_from_slice(&self.url_or_bytecode_bytes);
+                    packed.extend_from_slice(salt.as_slice());
+                    keccak256(&packed)
+                }
             }
         }
     }
@@ -278,5 +285,38 @@ mod tests {
 
         assert!(format!("{:?}", mode1).contains("Create2"));
         assert!(format!("{:?}", mode2).contains("Create3"));
+    }
+
+    #[test]
+    fn test_create3_specific_case_zero_salt() {
+        // Test the specific case from the issue:
+        // factory: 0x1248163213abcDB329F652121E92288b9046de4F
+        // url: "test.test"
+        // salt: 0 (zero)
+        let config = MinerConfig {
+            factory_address: address!("1248163213abcDB329F652121E92288b9046de4F"),
+            url_or_bytecode_bytes: b"test.test".to_vec(),
+            prefix_bytes: b"1248".to_vec(),
+            prefix_len: 4,
+            postfix_bytes: Vec::new(),
+            postfix_len: 0,
+            mode: MiningMode::Create3,
+            case_sensitive: false,
+            postfix_only: false,
+            dual_matching: false,
+        };
+
+        let zero_salt = B256::ZERO;
+        let final_salt = config.compute_final_salt(&zero_salt);
+
+        // When salt is zero, final_salt should be keccak256("test.test")
+        let expected_final_salt = keccak256(b"test.test");
+        assert_eq!(final_salt, expected_final_salt);
+
+        // Test that non-zero salt produces different result
+        let non_zero_salt =
+            b256!("0000000000000000000000000000000000000000000000000000000000000001");
+        let final_salt_non_zero = config.compute_final_salt(&non_zero_salt);
+        assert_ne!(final_salt, final_salt_non_zero);
     }
 }

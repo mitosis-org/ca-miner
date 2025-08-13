@@ -351,4 +351,180 @@ mod tests {
         let _ = case_insensitive_result;
         let _ = case_sensitive_result;
     }
+
+    #[test]
+    fn test_create3_zero_salt_behavior() {
+        // Test that CREATE3 salt computation correctly handles zero salt:
+        // When salt is zero, should use only URL (not URL + zero_bytes)
+        // This fixes the inconsistency reported in the issue
+        let config = MinerConfig {
+            factory_address: address!("1248163213abcDB329F652121E92288b9046de4F"),
+            url_or_bytecode_bytes: b"test.test".to_vec(),
+            prefix_bytes: b"1248".to_vec(),
+            prefix_len: 4,
+            postfix_bytes: Vec::new(),
+            postfix_len: 0,
+            mode: MiningMode::Create3,
+            case_sensitive: false,
+            postfix_only: false,
+            dual_matching: false,
+        };
+
+        // Test zero salt behavior
+        let zero_salt = B256::ZERO;
+        let final_salt_zero = config.compute_final_salt(&zero_salt);
+        let url_keccak = keccak256(b"test.test");
+
+        // When salt is zero, final salt should be keccak256(url) only
+        assert_eq!(
+            final_salt_zero, url_keccak,
+            "Final salt should be keccak256(url) when raw salt is zero"
+        );
+
+        // Test non-zero salt behavior
+        let non_zero_salt =
+            b256!("0000000000000000000000000000000000000000000000000000000000000001");
+        let final_salt_non_zero = config.compute_final_salt(&non_zero_salt);
+
+        // When salt is non-zero, should be different from URL-only hash
+        assert_ne!(
+            final_salt_non_zero, url_keccak,
+            "Final salt should be different when raw salt is non-zero"
+        );
+        assert_ne!(
+            final_salt_zero, final_salt_non_zero,
+            "Zero and non-zero salts should produce different final salts"
+        );
+
+        // Verify deterministic behavior
+        let addr1 = get_create3_address(&config, &final_salt_zero);
+        let addr2 = get_create3_address(&config, &final_salt_zero);
+        assert_eq!(addr1, addr2, "Address generation should be deterministic");
+
+        // For now, just verify the address is deterministic
+        // We'll need to verify against the exact Solidity implementation separately
+        println!("Computed CREATE3 address: {:#x}", addr1);
+    }
+
+    #[test]
+    fn test_create3_solidity_equivalent() {
+        // Replicate the exact Solidity logic:
+        // bytes memory preimage = salt == bytes32(0) ? abi.encodePacked(url) : abi.encodePacked(url, salt);
+        // address predicted2 = CREATE3.predictDeterministicAddress(keccak256(preimage), address(deployer));
+
+        let factory_deployer = address!("1248163213abcDB329F652121E92288b9046de4F");
+        let url = b"test.test";
+        let salt = B256::ZERO;
+
+        // Step 1: Compute preimage according to Solidity logic
+        let preimage = if salt == B256::ZERO {
+            // abi.encodePacked(url) when salt is zero
+            url.to_vec()
+        } else {
+            // abi.encodePacked(url, salt) when salt is non-zero
+            let mut packed = Vec::with_capacity(url.len() + 32);
+            packed.extend_from_slice(url);
+            packed.extend_from_slice(salt.as_slice());
+            packed
+        };
+
+        // Step 2: keccak256(preimage) - this becomes the salt for CREATE3
+        let create3_salt = keccak256(&preimage);
+
+        println!("URL: {:?}", String::from_utf8_lossy(url));
+        println!("Salt: {:#x}", salt);
+        println!("Preimage: {:?}", preimage);
+        println!("CREATE3 salt (keccak256(preimage)): {:#x}", create3_salt);
+        println!("Factory/Deployer: {:#x}", factory_deployer);
+
+        // Step 3: CREATE3.predictDeterministicAddress(create3_salt, deployer)
+        // This should match our get_create3_address function
+        let config = MinerConfig {
+            factory_address: factory_deployer,
+            url_or_bytecode_bytes: url.to_vec(),
+            prefix_bytes: b"1248".to_vec(),
+            prefix_len: 4,
+            postfix_bytes: Vec::new(),
+            postfix_len: 0,
+            mode: MiningMode::Create3,
+            case_sensitive: false,
+            postfix_only: false,
+            dual_matching: false,
+        };
+
+        let rust_result = get_create3_address(&config, &create3_salt);
+        println!("Rust CREATE3 result: {:#x}", rust_result);
+
+        // Let's also manually verify the CREATE3 calculation step by step
+        println!("\n--- Manual CREATE3 verification ---");
+
+        // CREATE3 Step 1: Compute proxy address using CREATE2
+        let mut create2_packed = Vec::with_capacity(85);
+        create2_packed.push(0xff);
+        create2_packed.extend_from_slice(factory_deployer.as_slice());
+        create2_packed.extend_from_slice(create3_salt.as_slice());
+        create2_packed.extend_from_slice(CREATE3_PROXY_INITCODE_HASH.as_slice());
+
+        let proxy_hash = keccak256(&create2_packed);
+        let proxy_addr = Address::from_slice(&proxy_hash[12..]);
+        println!("Proxy address: {:#x}", proxy_addr);
+
+        // CREATE3 Step 2: Compute deployed address using CREATE from proxy (nonce=1)
+        let mut rlp_data = Vec::with_capacity(23);
+        rlp_data.push(0xd6); // RLP list with 22 bytes (0xc0 + 22)
+        rlp_data.push(0x94); // Byte string with 20 bytes (0x80 + 20)
+        rlp_data.extend_from_slice(proxy_addr.as_slice());
+        rlp_data.push(0x01); // Integer 1
+
+        let deployed_hash = keccak256(&rlp_data);
+        let deployed_addr = Address::from_slice(&deployed_hash[12..]);
+        println!("Final deployed address: {:#x}", deployed_addr);
+
+        assert_eq!(
+            rust_result, deployed_addr,
+            "Rust implementation should match manual calculation"
+        );
+    }
+
+    #[test]
+    fn test_raw_salt_vs_final_salt_example() {
+        let config = MinerConfig {
+            factory_address: address!("1248163213abcDB329F652121E92288b9046de4F"),
+            url_or_bytecode_bytes: b"test.test".to_vec(),
+            prefix_bytes: b"1248".to_vec(),
+            prefix_len: 4,
+            postfix_bytes: Vec::new(),
+            postfix_len: 0,
+            mode: MiningMode::Create3,
+            case_sensitive: false,
+            postfix_only: false,
+            dual_matching: false,
+        };
+
+        // Example 1: Raw salt = 0
+        let raw_salt = B256::ZERO;
+        let final_salt = config.compute_final_salt(&raw_salt);
+        let address = get_create3_address(&config, &final_salt);
+
+        println!("Example 1 - Raw salt 0:");
+        println!("  Raw salt:   {:#x}", raw_salt);
+        println!("  Final salt: {:#x}", final_salt);
+        println!("  Address:    {:#x}", address);
+
+        // Example 2: Raw salt = 1
+        let raw_salt = b256!("0000000000000000000000000000000000000000000000000000000000000001");
+        let final_salt = config.compute_final_salt(&raw_salt);
+        let address = get_create3_address(&config, &final_salt);
+
+        println!("\nExample 2 - Raw salt 1:");
+        println!("  Raw salt:   {:#x}", raw_salt);
+        println!("  Final salt: {:#x}", final_salt);
+        println!("  Address:    {:#x}", address);
+
+        // Show the difference between using raw vs final salt incorrectly
+        println!("\nCommon mistake - using raw salt directly:");
+        let wrong_address = get_create3_address(&config, &raw_salt);
+        println!("  Wrong address: {:#x}", wrong_address);
+        println!("  (This would be incorrect for CREATE3!)");
+    }
 }
